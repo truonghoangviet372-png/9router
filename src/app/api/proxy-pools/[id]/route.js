@@ -5,11 +5,75 @@ import {
   getProxyPoolById,
   updateProxyPool,
 } from "@/models";
+import { buildXrayPoolConfigFromText } from "@/lib/network/xrayParser";
 
-function normalizeProxyPoolUpdate(body = {}) {
+const VALID_PROXY_TYPES = ["http", "vercel", "xray"];
+
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function normalizeXrayUpdate(body = {}, existing = {}, { required = false } = {}) {
+  const hasXrayConfig = hasOwn(body, "xrayConfig");
+  const hasXrayOutbound = hasOwn(body, "xrayOutbound");
+  const hasXrayMeta = hasOwn(body, "xrayMeta");
+  const hasProxyUrl = hasOwn(body, "proxyUrl");
+  const hasRelevantField = hasXrayConfig || hasXrayOutbound || hasXrayMeta || hasProxyUrl;
+
+  if (!hasRelevantField && !required) return { updates: {} };
+
+  let xrayOutbound = null;
+  let xrayMeta = null;
+  let proxyUrl = "";
+  let xrayConfig = null;
+
+  if (hasXrayOutbound) {
+    if (!body.xrayOutbound || typeof body.xrayOutbound !== "object") {
+      return { error: "xrayOutbound must be an object" };
+    }
+
+    xrayOutbound = body.xrayOutbound;
+    xrayMeta = body?.xrayMeta && typeof body.xrayMeta === "object"
+      ? body.xrayMeta
+      : (existing?.xrayMeta || {});
+    proxyUrl = typeof body?.proxyUrl === "string" ? body.proxyUrl.trim() : "";
+
+    if (!proxyUrl) {
+      const protocol = String(xrayMeta?.protocol || "custom").trim() || "custom";
+      const server = String(xrayMeta?.server || "node").trim() || "node";
+      const portRaw = Number(xrayMeta?.port);
+      const port = Number.isInteger(portRaw) && portRaw > 0 ? portRaw : 0;
+      proxyUrl = `xray://${protocol}@${server}:${port}`;
+    }
+  } else if (hasXrayConfig) {
+    xrayConfig = typeof body?.xrayConfig === "string" ? body.xrayConfig.trim() : "";
+    if (!xrayConfig) return { error: "xrayConfig is required" };
+    const parsed = buildXrayPoolConfigFromText(xrayConfig);
+    if (parsed.error) return { error: parsed.error };
+    xrayOutbound = parsed.xrayOutbound;
+    xrayMeta = parsed.xrayMeta;
+    proxyUrl = parsed.proxyUrl;
+  } else if (required) {
+    if (!existing?.xrayOutbound || typeof existing.xrayOutbound !== "object") {
+      return { error: "Missing Xray config. Provide xrayConfig text or xrayOutbound object." };
+    }
+    xrayOutbound = existing.xrayOutbound;
+    xrayMeta = existing.xrayMeta || {};
+    proxyUrl = existing.proxyUrl || "xray://custom@node:0";
+  }
+
+  const updates = {};
+  if (xrayOutbound) updates.xrayOutbound = xrayOutbound;
+  if (xrayMeta) updates.xrayMeta = xrayMeta;
+  if (proxyUrl) updates.proxyUrl = proxyUrl;
+  if (xrayConfig) updates.xrayConfig = xrayConfig;
+  return { updates };
+}
+
+function normalizeProxyPoolUpdate(body = {}, existing = {}) {
   const updates = {};
 
-  if (Object.prototype.hasOwnProperty.call(body, "name")) {
+  if (hasOwn(body, "name")) {
     const name = typeof body?.name === "string" ? body.name.trim() : "";
     if (!name) {
       return { error: "Name is required" };
@@ -17,29 +81,50 @@ function normalizeProxyPoolUpdate(body = {}) {
     updates.name = name;
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "proxyUrl")) {
-    const proxyUrl = typeof body?.proxyUrl === "string" ? body.proxyUrl.trim() : "";
-    if (!proxyUrl) {
-      return { error: "Proxy URL is required" };
-    }
-    updates.proxyUrl = proxyUrl;
+  if (hasOwn(body, "type")) {
+    updates.type = VALID_PROXY_TYPES.includes(body?.type) ? body.type : "http";
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "noProxy")) {
+  const effectiveType = updates.type || existing.type || "http";
+
+  if (effectiveType !== "xray" && hasOwn(body, "proxyUrl")) {
+    const proxyUrlRaw = typeof body?.proxyUrl === "string" ? body.proxyUrl.trim() : "";
+    if (!proxyUrlRaw) {
+      return { error: "Proxy URL is required" };
+    }
+    updates.proxyUrl = proxyUrlRaw;
+  }
+
+  if (hasOwn(body, "noProxy")) {
     updates.noProxy = typeof body?.noProxy === "string" ? body.noProxy.trim() : "";
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "isActive")) {
+  if (hasOwn(body, "isActive")) {
     updates.isActive = body?.isActive === true;
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "strictProxy")) {
+  if (hasOwn(body, "strictProxy")) {
     updates.strictProxy = body?.strictProxy === true;
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "type")) {
-    const validTypes = ["http", "vercel"];
-    updates.type = validTypes.includes(body?.type) ? body.type : "http";
+  if (effectiveType === "xray") {
+    const xrayRequired = updates.type === "xray" && existing.type !== "xray";
+    const xrayNormalized = normalizeXrayUpdate(body, existing, { required: xrayRequired });
+    if (xrayNormalized.error) {
+      return { error: xrayNormalized.error };
+    }
+    Object.assign(updates, xrayNormalized.updates);
+  } else if (updates.type && existing.type === "xray") {
+    updates.xrayOutbound = null;
+    updates.xrayMeta = null;
+    updates.xrayConfig = null;
+    if (!updates.proxyUrl) {
+      const fallbackProxyUrl = typeof body?.proxyUrl === "string" ? body.proxyUrl.trim() : "";
+      if (!fallbackProxyUrl) {
+        return { error: "Proxy URL is required when switching away from xray type" };
+      }
+      updates.proxyUrl = fallbackProxyUrl;
+    }
   }
 
   return { updates };
@@ -77,7 +162,7 @@ export async function PUT(request, { params }) {
     }
 
     const body = await request.json();
-    const normalized = normalizeProxyPoolUpdate(body);
+    const normalized = normalizeProxyPoolUpdate(body, existing);
 
     if (normalized.error) {
       return NextResponse.json({ error: normalized.error }, { status: 400 });

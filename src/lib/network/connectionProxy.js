@@ -1,4 +1,5 @@
 import { getProxyPoolById } from "@/models";
+import { ensureXrayProxyPoolRuntime } from "@/lib/network/xrayRuntime";
 
 function normalizeString(value) {
   if (value === undefined || value === null) return "";
@@ -28,6 +29,20 @@ export async function resolveConnectionProxyConfig(providerSpecificData = {}) {
     const noProxy = normalizeString(proxyPool?.noProxy);
 
     if (proxyPool && proxyPool.isActive === true && proxyUrl) {
+      if (proxyPool.type === "xray") {
+        const runtime = await ensureXrayProxyPoolRuntime(proxyPool);
+        return {
+          source: "xray",
+          proxyPoolId,
+          proxyPool,
+          connectionProxyEnabled: true,
+          connectionProxyUrl: runtime.proxyUrl,
+          connectionNoProxy: noProxy,
+          strictProxy: proxyPool.strictProxy === true,
+          xrayRuntime: runtime,
+        };
+      }
+
       // Vercel relay: rewrite base URL instead of using HTTP_PROXY
       if (proxyPool.type === "vercel") {
         return {

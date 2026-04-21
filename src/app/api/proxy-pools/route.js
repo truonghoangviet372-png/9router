@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createProxyPool, getProviderConnections, getProxyPools } from "@/models";
+import { buildXrayPoolConfigFromText } from "@/lib/network/xrayParser";
 
 function toBoolean(value) {
   if (value === "true") return true;
@@ -7,17 +8,86 @@ function toBoolean(value) {
   return undefined;
 }
 
-const VALID_PROXY_TYPES = ["http", "vercel"];
+const VALID_PROXY_TYPES = ["http", "vercel", "xray"];
+
+function normalizeXrayInput(body = {}) {
+  const xrayConfig = typeof body?.xrayConfig === "string" ? body.xrayConfig.trim() : "";
+  const xrayOutbound = body?.xrayOutbound && typeof body.xrayOutbound === "object" ? body.xrayOutbound : null;
+  const xrayMeta = body?.xrayMeta && typeof body.xrayMeta === "object" ? body.xrayMeta : null;
+
+  if (xrayOutbound) {
+    const proxyUrl = typeof body?.proxyUrl === "string" ? body.proxyUrl.trim() : "";
+    const fallbackMeta = xrayMeta || {};
+    const protocol = String(fallbackMeta.protocol || "custom").trim() || "custom";
+    const server = String(fallbackMeta.server || "node").trim() || "node";
+    const portRaw = Number(fallbackMeta.port);
+    const port = Number.isInteger(portRaw) && portRaw > 0 ? portRaw : 0;
+
+    return {
+      xrayOutbound,
+      xrayMeta: fallbackMeta,
+      proxyUrl: proxyUrl || `xray://${protocol}@${server}:${port}`,
+      suggestedName: typeof fallbackMeta.remark === "string" ? fallbackMeta.remark.trim() : "",
+    };
+  }
+
+  if (!xrayConfig) {
+    return { error: "Xray config text is required for xray proxy type" };
+  }
+
+  const parsed = buildXrayPoolConfigFromText(xrayConfig);
+  if (parsed.error) {
+    return { error: parsed.error };
+  }
+
+  return {
+    xrayOutbound: parsed.xrayOutbound,
+    xrayMeta: parsed.xrayMeta,
+    proxyUrl: parsed.proxyUrl,
+    suggestedName: parsed.suggestedName || "",
+    xrayConfig,
+  };
+}
 
 function normalizeProxyPoolInput(body = {}) {
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const requestedName = typeof body?.name === "string" ? body.name.trim() : "";
   const proxyUrl = typeof body?.proxyUrl === "string" ? body.proxyUrl.trim() : "";
   const noProxy = typeof body?.noProxy === "string" ? body.noProxy.trim() : "";
   const isActive = body?.isActive === undefined ? true : body.isActive === true;
   const strictProxy = body?.strictProxy === true;
   const type = VALID_PROXY_TYPES.includes(body?.type) ? body.type : "http";
 
-  if (!name) {
+  if (type === "xray") {
+    const xrayInput = normalizeXrayInput(body);
+    if (xrayInput.error) {
+      return { error: xrayInput.error };
+    }
+
+    const fallbackName = [
+      xrayInput.suggestedName,
+      xrayInput.xrayMeta?.remark,
+      `Xray ${xrayInput.xrayMeta?.protocol || "node"} ${xrayInput.xrayMeta?.server || ""}`.trim(),
+    ].find((item) => typeof item === "string" && item.trim()) || "Xray Node";
+
+    const name = requestedName || fallbackName;
+    if (!name) {
+      return { error: "Name is required" };
+    }
+
+    return {
+      name,
+      proxyUrl: xrayInput.proxyUrl,
+      noProxy,
+      isActive,
+      strictProxy,
+      type,
+      xrayOutbound: xrayInput.xrayOutbound,
+      xrayMeta: xrayInput.xrayMeta,
+      xrayConfig: xrayInput.xrayConfig || null,
+    };
+  }
+
+  if (!requestedName) {
     return { error: "Name is required" };
   }
 
@@ -25,7 +95,7 @@ function normalizeProxyPoolInput(body = {}) {
     return { error: "Proxy URL is required" };
   }
 
-  return { name, proxyUrl, noProxy, isActive, strictProxy, type };
+  return { name: requestedName, proxyUrl, noProxy, isActive, strictProxy, type };
 }
 
 function buildUsageMap(connections = []) {

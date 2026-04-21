@@ -25,7 +25,13 @@ export async function GET(request, { params }) {
     if (action === "authorize") {
       const providerData = getProvider(provider);
       const callbackPath = providerData.callbackPath || "/callback";
-      const redirectUri = searchParams.get("redirect_uri") || buildOAuthRedirectUri(callbackPath);
+      const envBaseUrl = process.env.BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
+      const requestOrigin = new URL(request.url).origin;
+      const redirectUri =
+        searchParams.get("redirect_uri") ||
+        (envBaseUrl
+          ? buildOAuthRedirectUri(callbackPath)
+          : `${requestOrigin}${callbackPath}`);
       // Collect provider-specific meta params (e.g. gitlab passes baseUrl, clientId, clientSecret)
       const reservedParams = new Set(["redirect_uri"]);
       const meta = {};

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge, Button, Card, CardSkeleton, Input, Modal, Toggle } from "@/shared/components";
+import { Badge, Button, Card, CardSkeleton, Input, Modal, Select, Toggle } from "@/shared/components";
 import { useNotificationStore } from "@/store/notificationStore";
+import { splitXrayConfigBlocks } from "@/lib/network/xrayParser";
 
 function getStatusVariant(status) {
   if (status === "active") return "success";
@@ -20,11 +21,21 @@ function formatDateTime(value) {
 function normalizeFormData(data = {}) {
   return {
     name: data.name || "",
+    type: data.type || "http",
     proxyUrl: data.proxyUrl || "",
     noProxy: data.noProxy || "",
     isActive: data.isActive !== false,
     strictProxy: data.strictProxy === true,
+    xrayConfig: data.xrayConfig || "",
   };
+}
+
+function normalizeCountryCode(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]/g, "")
+    .slice(0, 2);
 }
 
 export default function ProxyPoolsPage() {
@@ -39,6 +50,11 @@ export default function ProxyPoolsPage() {
   const [vercelForm, setVercelForm] = useState({ vercelToken: "", projectName: "vercel-relay" });
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [pollingV2nodes, setPollingV2nodes] = useState(false);
+  const [applyStrictBatchImport, setApplyStrictBatchImport] = useState(false);
+  const [showPollModal, setShowPollModal] = useState(false);
+  const [pollCountryPreset, setPollCountryPreset] = useState("kr");
+  const [pollCountryCustom, setPollCountryCustom] = useState("");
   const [deploying, setDeploying] = useState(false);
   const [testingId, setTestingId] = useState(null);
   const notify = useNotificationStore();
@@ -85,13 +101,27 @@ export default function ProxyPoolsPage() {
   const handleSave = async () => {
     const payload = {
       name: formData.name.trim(),
+      type: formData.type || "http",
       proxyUrl: formData.proxyUrl.trim(),
       noProxy: formData.noProxy.trim(),
       isActive: formData.isActive === true,
       strictProxy: formData.strictProxy === true,
     };
 
-    if (!payload.name || !payload.proxyUrl) return;
+    if (!payload.name) return;
+
+    if (payload.type === "xray") {
+      const xrayConfig = formData.xrayConfig.trim();
+      if (xrayConfig) {
+        payload.xrayConfig = xrayConfig;
+      }
+      if (!editingProxyPool && !payload.xrayConfig) return;
+      if (!payload.proxyUrl) {
+        delete payload.proxyUrl;
+      }
+    } else if (!payload.proxyUrl) {
+      return;
+    }
 
     setSaving(true);
     try {
@@ -164,12 +194,23 @@ export default function ProxyPoolsPage() {
 
   const openBatchImportModal = () => {
     setBatchImportText("");
+    setApplyStrictBatchImport(false);
     setShowBatchImportModal(true);
   };
 
   const closeBatchImportModal = () => {
-    if (importing) return;
+    if (importing || pollingV2nodes) return;
     setShowBatchImportModal(false);
+  };
+
+  const openPollModal = () => {
+    if (importing || pollingV2nodes) return;
+    setShowPollModal(true);
+  };
+
+  const closePollModal = () => {
+    if (pollingV2nodes) return;
+    setShowPollModal(false);
   };
 
   const openVercelModal = () => {
@@ -207,6 +248,55 @@ export default function ProxyPoolsPage() {
     }
   };
 
+  const handlePollV2nodes = async () => {
+    const countryCode = normalizeCountryCode(
+      pollCountryPreset === "custom" ? pollCountryCustom : pollCountryPreset
+    );
+
+    if (!countryCode) {
+      notify.warning("Please enter a valid 2-letter country code.");
+      return;
+    }
+
+    const countryLabel = countryCode.toUpperCase();
+    setPollingV2nodes(true);
+    try {
+      const res = await fetch(`/api/proxy-pools/poll?country=${encodeURIComponent(countryCode)}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        notify.error(data.error || "Failed to poll v2nodes");
+        return;
+      }
+
+      const importText = typeof data?.importText === "string" ? data.importText.trim() : "";
+      if (!importText) {
+        notify.warning(`No clean ${countryLabel} proxies found from v2nodes.`);
+        return;
+      }
+
+      setBatchImportText((prev) => {
+        const current = prev.trim();
+        return current ? `${current}\n\n${importText}` : importText;
+      });
+
+      const count = Array.isArray(data?.configs) ? data.configs.length : 0;
+      const failed = Number(data?.failedServerPages || 0);
+      notify.success(
+        `Polled ${count} clean ${countryLabel} node(s) from v2nodes${failed > 0 ? ` (${failed} page(s) failed)` : ""}.`
+      );
+      setShowPollModal(false);
+    } catch (error) {
+      console.log("Error polling v2nodes list:", error);
+      notify.error("Failed to poll v2nodes");
+    } finally {
+      setPollingV2nodes(false);
+    }
+  };
+
   const parseProxyLine = (line) => {
     const trimmed = line.trim();
     if (!trimmed) return null;
@@ -239,6 +329,44 @@ export default function ProxyPoolsPage() {
   };
 
   const handleBatchImport = async () => {
+    const xrayBlocks = splitXrayConfigBlocks(batchImportText).filter((block) => /^type\s*:/im.test(block));
+    if (xrayBlocks.length > 0) {
+      setImporting(true);
+      try {
+        let created = 0;
+        let failed = 0;
+
+        for (let index = 0; index < xrayBlocks.length; index += 1) {
+          const block = xrayBlocks[index];
+          const res = await fetch("/api/proxy-pools", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: `Imported Xray #${index + 1}`,
+              type: "xray",
+              xrayConfig: block,
+              noProxy: "",
+              isActive: true,
+              strictProxy: applyStrictBatchImport === true,
+            }),
+          });
+
+          if (res.ok) created += 1;
+          else failed += 1;
+        }
+
+        await fetchProxyPools();
+        setShowBatchImportModal(false);
+        notify.success(`Xray import completed: Created ${created}, Failed ${failed}`);
+      } catch (error) {
+        console.log("Error batch importing xray configs:", error);
+        notify.error("Xray batch import failed");
+      } finally {
+        setImporting(false);
+      }
+      return;
+    }
+
     const lines = batchImportText
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -296,6 +424,7 @@ export default function ProxyPoolsPage() {
             proxyUrl: entry.proxyUrl,
             noProxy: "",
             isActive: true,
+            strictProxy: applyStrictBatchImport === true,
           }),
         });
 
@@ -322,6 +451,18 @@ export default function ProxyPoolsPage() {
     () => proxyPools.filter((pool) => pool.isActive === true).length,
     [proxyPools]
   );
+  const isXrayForm = formData.type === "xray";
+  const requiresXrayConfig = isXrayForm && !editingProxyPool;
+  const isSaveDisabled = !formData.name.trim()
+    || (!isXrayForm && !formData.proxyUrl.trim())
+    || (requiresXrayConfig && !formData.xrayConfig.trim())
+    || saving;
+  const selectedPollCountry = normalizeCountryCode(
+    pollCountryPreset === "custom" ? pollCountryCustom : pollCountryPreset
+  );
+  const selectedPollCountryUrl = selectedPollCountry
+    ? `https://www.v2nodes.com/country/${selectedPollCountry}/`
+    : "";
 
   if (loading) {
     return (
@@ -385,11 +526,17 @@ export default function ProxyPoolsPage() {
                     {pool.type === "vercel" && (
                       <Badge variant="default" size="sm">vercel relay</Badge>
                     )}
+                    {pool.type === "xray" && (
+                      <Badge variant="default" size="sm">xray</Badge>
+                    )}
                     <Badge variant="default" size="sm">
                       {pool.boundConnectionCount || 0} bound
                     </Badge>
                   </div>
                   <p className="text-xs text-text-muted truncate mt-1">{pool.proxyUrl}</p>
+                  {pool.type === "xray" && pool.xrayMeta?.remark ? (
+                    <p className="text-xs text-text-muted truncate">Remark: {pool.xrayMeta.remark}</p>
+                  ) : null}
                   {pool.noProxy ? (
                     <p className="text-xs text-text-muted truncate">No proxy: {pool.noProxy}</p>
                   ) : null}
@@ -442,22 +589,105 @@ export default function ProxyPoolsPage() {
         <div className="flex flex-col gap-4">
           <div>
             <label className="text-sm font-medium text-text-main mb-1 block">Paste Proxy List (One per line)</label>
-            <textarea
-              value={batchImportText}
-              onChange={(e) => setBatchImportText(e.target.value)}
-              placeholder={"http://user:pass@127.0.0.1:7897\n127.0.0.1:7897:user:pass"}
-              className="w-full min-h-[180px] py-2 px-3 text-sm text-text-main bg-white dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-md focus:ring-1 focus:ring-primary/30 focus:border-primary/50 focus:outline-none transition-all"
+              <textarea
+                value={batchImportText}
+                onChange={(e) => setBatchImportText(e.target.value)}
+                placeholder={"http://user:pass@127.0.0.1:7897\n127.0.0.1:7897:user:pass\n\nType: VLESS\nServer: 1.2.3.4\nPort: 443\nUUID: ..."}
+                className="w-full min-h-[180px] py-2 px-3 text-sm text-text-main bg-white dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-md focus:ring-1 focus:ring-primary/30 focus:border-primary/50 focus:outline-none transition-all"
+              />
+              <p className="text-xs text-text-muted mt-1">
+                Supported formats: protocol://user:pass@host:port, host:port:user:pass, Xray key-value blocks (Type/Server/Port...)
+              </p>
+            </div>
+          <div className="rounded-lg border border-border/50 p-3 flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Apply Strict Proxy</p>
+              <p className="text-xs text-text-muted">
+                Enable Strict Proxy for all imported entries in this batch.
+              </p>
+            </div>
+            <Toggle
+              checked={applyStrictBatchImport === true}
+              onChange={() => setApplyStrictBatchImport((prev) => !prev)}
+              disabled={importing || pollingV2nodes}
             />
-            <p className="text-xs text-text-muted mt-1">
-              Supported formats: protocol://user:pass@host:port, host:port:user:pass
-            </p>
           </div>
 
           <div className="flex gap-2">
-            <Button fullWidth onClick={handleBatchImport} disabled={!batchImportText.trim() || importing}>
+            <Button
+              fullWidth
+              variant="secondary"
+              icon="sync"
+              onClick={openPollModal}
+              disabled={importing || pollingV2nodes}
+            >
+              Poll v2nodes
+            </Button>
+            <Button
+              fullWidth
+              onClick={handleBatchImport}
+              disabled={!batchImportText.trim() || importing || pollingV2nodes}
+            >
               {importing ? "Importing..." : "Import"}
             </Button>
-            <Button fullWidth variant="ghost" onClick={closeBatchImportModal} disabled={importing}>
+            <Button fullWidth variant="ghost" onClick={closeBatchImportModal} disabled={importing || pollingV2nodes}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showPollModal}
+        title="Poll v2nodes"
+        onClose={closePollModal}
+      >
+        <div className="flex flex-col gap-4">
+          <Select
+            label="Country"
+            value={pollCountryPreset}
+            onChange={(e) => setPollCountryPreset(e.target.value)}
+            options={[
+              { value: "kr", label: "KR - Korea" },
+              { value: "us", label: "US - United States" },
+              { value: "custom", label: "Custom Country Code" },
+            ]}
+          />
+          {pollCountryPreset === "custom" ? (
+            <Input
+              label="Country Code"
+              value={pollCountryCustom}
+              onChange={(e) => setPollCountryCustom(e.target.value)}
+              placeholder="jp"
+              hint="Use 2-letter code (e.g. kr, us, jp, sg)."
+              maxLength={8}
+            />
+          ) : null}
+          {selectedPollCountryUrl ? (
+            <p className="text-xs text-text-muted">
+              Source:{" "}
+              <a
+                href={selectedPollCountryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                {selectedPollCountryUrl}
+              </a>
+            </p>
+          ) : (
+            <p className="text-xs text-text-muted">Source URL will appear when country code is valid.</p>
+          )}
+          <div className="flex gap-2">
+            <Button
+              fullWidth
+              icon="sync"
+              onClick={handlePollV2nodes}
+              disabled={pollingV2nodes}
+            >
+              {pollingV2nodes ? "Polling..." : "Poll And Fill Import"}
+            </Button>
+            <Button fullWidth variant="ghost" onClick={closePollModal} disabled={pollingV2nodes}>
               Cancel
             </Button>
           </div>
@@ -524,12 +754,37 @@ export default function ProxyPoolsPage() {
             onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
             placeholder="Office Proxy"
           />
-          <Input
-            label="Proxy URL"
-            value={formData.proxyUrl}
-            onChange={(e) => setFormData((prev) => ({ ...prev, proxyUrl: e.target.value }))}
-            placeholder="http://127.0.0.1:7897"
+          <Select
+            label="Type"
+            value={formData.type}
+            onChange={(e) => setFormData((prev) => ({ ...prev, type: e.target.value }))}
+            options={[
+              { value: "http", label: "HTTP / SOCKS Proxy URL" },
+              { value: "xray", label: "Xray Node (Trojan/VMess/VLESS/SS)" },
+              { value: "vercel", label: "Vercel Relay URL" },
+            ]}
           />
+          {formData.type === "xray" ? (
+            <div>
+              <label className="text-sm font-medium text-text-main mb-1 block">Xray Config</label>
+              <textarea
+                value={formData.xrayConfig}
+                onChange={(e) => setFormData((prev) => ({ ...prev, xrayConfig: e.target.value }))}
+                placeholder={"Type: VLESS\nServer: 1.2.3.4\nPort: 443\nUUID: ...\nSecurity: tls\nNetwork: ws\nPath: /\nHost Header: domain.example"}
+                className="w-full min-h-[160px] py-2 px-3 text-sm text-text-main bg-white dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-md focus:ring-1 focus:ring-primary/30 focus:border-primary/50 focus:outline-none transition-all"
+              />
+              <p className="text-xs text-text-muted mt-1">
+                Paste one node block with keys like Type/Server/Port. On edit, leave empty to keep existing Xray config.
+              </p>
+            </div>
+          ) : (
+            <Input
+              label="Proxy URL"
+              value={formData.proxyUrl}
+              onChange={(e) => setFormData((prev) => ({ ...prev, proxyUrl: e.target.value }))}
+              placeholder={formData.type === "vercel" ? "https://your-relay.vercel.app" : "http://127.0.0.1:7897"}
+            />
+          )}
           <Input
             label="No Proxy"
             value={formData.noProxy}
@@ -566,7 +821,7 @@ export default function ProxyPoolsPage() {
             <Button
               fullWidth
               onClick={handleSave}
-              disabled={!formData.name.trim() || !formData.proxyUrl.trim() || saving}
+              disabled={isSaveDisabled}
             >
               {saving ? "Saving..." : "Save"}
             </Button>

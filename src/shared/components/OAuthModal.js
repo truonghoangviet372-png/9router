@@ -35,8 +35,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
       );
       const callbackPath = provider === "codex" ? "/auth/callback" : "/callback";
-      const useClientBaseUrl = provider !== "codex";
-      setPlaceholderUrl(`${buildOAuthRedirectUri(callbackPath, { client: useClientBaseUrl })}?code=...`);
+      setPlaceholderUrl(`${buildOAuthRedirectUri(callbackPath, { client: true })}?code=...`);
     }
   }, [provider]);
 
@@ -183,15 +182,17 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         } catch {
           codexProxyActive = false;
         }
-        // Codex requires /auth/callback path; base URL is env-driven.
-        redirectUri = buildOAuthRedirectUri("/auth/callback");
+        // Let server decide codex redirect_uri so BASE_URL can take priority.
+        redirectUri = null;
       } else {
         redirectUri = buildOAuthRedirectUri("/callback", { client: true });
       }
 
       // Build authorize URL, optionally passing provider-specific metadata (e.g. gitlab clientId)
       const authorizeUrl = new URL(`/api/oauth/${provider}/authorize`, window.location.origin);
-      authorizeUrl.searchParams.set("redirect_uri", redirectUri);
+      if (redirectUri) {
+        authorizeUrl.searchParams.set("redirect_uri", redirectUri);
+      }
       if (oauthMeta) {
         Object.entries(oauthMeta).forEach(([k, v]) => { if (v) authorizeUrl.searchParams.set(k, v); });
       }
@@ -199,7 +200,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      setAuthData({ ...data, redirectUri });
+      setAuthData({ ...data, redirectUri: redirectUri || data.redirectUri });
 
       if (provider === "codex" && codexProxyActive) {
         // Proxy active: callback will redirect to app port automatically

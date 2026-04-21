@@ -1033,9 +1033,11 @@ docker stop 9router && docker rm 9router
 | `AUTH_COOKIE_SECURE` | `false` | Force `Secure` auth cookie (set `true` behind HTTPS reverse proxy) |
 | `REQUIRE_API_KEY` | `false` | Enforce Bearer API key on `/v1/*` routes (recommended for internet-exposed deploys) |
 | `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` | empty | Optional outbound proxy for upstream provider calls |
+| `XRAY_BIN`, `XRAY_VERSION`, `XRAY_AUTO_INSTALL` | auto-detect / `latest` / `true` | Optional Xray binary path + auto-install behavior for Xray proxy pools |
 
 Notes:
 - Lowercase proxy variables are also supported: `http_proxy`, `https_proxy`, `all_proxy`, `no_proxy`.
+- If `XRAY_BIN` is not set and no `xray` exists in `PATH`, 9Router auto-downloads Xray Core when needed (or on startup pre-check).
 - `.env` is not baked into Docker image (`.dockerignore`); inject runtime config with `--env-file` or `-e`.
 - On Windows, `APPDATA` can be used for local storage path resolution.
 - `INSTANCE_NAME` appears in older docs/env templates, but is currently not used at runtime.

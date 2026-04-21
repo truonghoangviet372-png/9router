@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getProxyPoolById, updateProxyPool } from "@/models";
 import { testProxyUrl } from "@/lib/network/proxyTest";
+import { ensureXrayProxyPoolRuntime } from "@/lib/network/xrayRuntime";
 import { fetch as undiciFetch } from "undici";
 
 async function testVercelRelay(relayUrl, timeoutMs = 10000) {
@@ -43,9 +44,15 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: "Proxy pool not found" }, { status: 404 });
     }
 
-    const result = proxyPool.type === "vercel"
-      ? await testVercelRelay(proxyPool.proxyUrl)
-      : await testProxyUrl({ proxyUrl: proxyPool.proxyUrl });
+    let result;
+    if (proxyPool.type === "vercel") {
+      result = await testVercelRelay(proxyPool.proxyUrl);
+    } else if (proxyPool.type === "xray") {
+      const runtime = await ensureXrayProxyPoolRuntime(proxyPool);
+      result = await testProxyUrl({ proxyUrl: runtime.proxyUrl });
+    } else {
+      result = await testProxyUrl({ proxyUrl: proxyPool.proxyUrl });
+    }
     const now = new Date().toISOString();
 
     await updateProxyPool(id, {
@@ -65,6 +72,6 @@ export async function POST(request, { params }) {
     });
   } catch (error) {
     console.log("Error testing proxy pool:", error);
-    return NextResponse.json({ error: "Failed to test proxy pool" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Failed to test proxy pool" }, { status: 500 });
   }
 }

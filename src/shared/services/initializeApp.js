@@ -1,6 +1,7 @@
 import { cleanupProviderConnections, getSettings, updateSettings, getApiKeys } from "@/lib/localDb";
 import { enableTunnel, isTunnelManuallyDisabled, isTunnelReconnecting } from "@/lib/tunnel/tunnelManager";
 import { killCloudflared, isCloudflaredRunning, ensureCloudflared } from "@/lib/tunnel/cloudflared";
+import { ensureXrayBinary } from "@/lib/network/xrayInstaller";
 import { getMitmStatus, startMitm, loadEncryptedPassword, initDbHooks } from "@/mitm/manager";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -85,6 +86,13 @@ export async function initializeApp() {
 
     // Pre-download cloudflared binary in background
     ensureCloudflared().catch(() => {});
+    // Pre-check/install xray binary in background (used by Xray proxy pools)
+    const isCloudRuntime = typeof caches !== "undefined" && typeof caches === "object";
+    if (!isCloudRuntime) {
+      ensureXrayBinary().catch((err) => {
+        console.log("[InitApp] Xray check/install failed:", err?.message || err);
+      });
+    }
 
     // Watchdog: recover tunnel after process crash
     startWatchdog();
