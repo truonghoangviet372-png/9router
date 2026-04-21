@@ -5,6 +5,7 @@ import { getServerCredentials } from "../config/index.js";
 import { startLocalServer } from "../utils/server.js";
 import { generatePKCE } from "../utils/pkce.js";
 import { spinner as createSpinner } from "../utils/ui.js";
+import { getBaseUrlWithLocalPort } from "../../../shared/utils/baseUrl.js";
 
 /**
  * Codex (OpenAI) OAuth Service
@@ -82,7 +83,7 @@ export class CodexService extends OAuthService {
         callbackParams = params;
       }, fixedPort);
 
-      const redirectUri = `http://localhost:${port}/auth/callback`;
+      const redirectUri = `${getBaseUrlWithLocalPort(port)}/auth/callback`;
       spinner.succeed(`Local server started on port ${port}`);
 
       // Generate PKCE
@@ -142,4 +143,3 @@ export class CodexService extends OAuthService {
     }
   }
 }
-

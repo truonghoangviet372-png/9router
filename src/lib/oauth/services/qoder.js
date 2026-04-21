@@ -4,6 +4,7 @@ import { QODER_CONFIG } from "../constants/oauth.js";
 import { getServerCredentials } from "../config/index.js";
 import { startLocalServer } from "../utils/server.js";
 import { spinner as createSpinner } from "../utils/ui.js";
+import { getBaseUrlWithLocalPort } from "../../../shared/utils/baseUrl.js";
 
 /**
  * Qoder OAuth Service
@@ -176,7 +177,7 @@ export class QoderService {
         callbackParams = params;
       });
 
-      const redirectUri = `http://localhost:${port}/callback`;
+      const redirectUri = `${getBaseUrlWithLocalPort(port)}/callback`;
       spinner.succeed(`Local server started on port ${port}`);
 
       const state = crypto.randomBytes(32).toString("base64url");

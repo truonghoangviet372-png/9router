@@ -8,6 +8,7 @@ import {
 } from "@/lib/oauth/providers";
 import { createProviderConnection } from "@/models";
 import { startCodexProxy, stopCodexProxy } from "@/lib/oauth/utils/server";
+import { buildOAuthRedirectUri } from "@/shared/utils/baseUrl";
 
 /**
  * Dynamic OAuth API Route
@@ -22,7 +23,9 @@ export async function GET(request, { params }) {
     const { searchParams } = new URL(request.url);
 
     if (action === "authorize") {
-      const redirectUri = searchParams.get("redirect_uri") || "http://localhost:8080/callback";
+      const providerData = getProvider(provider);
+      const callbackPath = providerData.callbackPath || "/callback";
+      const redirectUri = searchParams.get("redirect_uri") || buildOAuthRedirectUri(callbackPath);
       // Collect provider-specific meta params (e.g. gitlab passes baseUrl, clientId, clientSecret)
       const reservedParams = new Set(["redirect_uri"]);
       const meta = {};

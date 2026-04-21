@@ -3,13 +3,12 @@
 import { useState } from "react";
 import PropTypes from "prop-types";
 import { Modal, Button, Input, OAuthModal } from "@/shared/components";
+import { buildOAuthRedirectUri } from "@/shared/utils/baseUrl";
 
 const GITLAB_COM = "https://gitlab.com";
 
 function getRedirectUri() {
-  if (typeof window === "undefined") return "http://localhost/callback";
-  const port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
-  return `http://localhost:${port}/callback`;
+  return buildOAuthRedirectUri("/callback", { client: true });
 }
 
 /**

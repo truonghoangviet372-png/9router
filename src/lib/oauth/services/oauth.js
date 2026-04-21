@@ -3,6 +3,7 @@ import { startLocalServer } from "../utils/server.js";
 import { generatePKCE } from "../utils/pkce.js";
 import { spinner as createSpinner } from "../utils/ui.js";
 import { OAUTH_TIMEOUT } from "../constants/oauth.js";
+import { getBaseUrlWithLocalPort } from "../../../shared/utils/baseUrl.js";
 
 /**
  * Generic OAuth Authorization Code Flow with PKCE
@@ -41,7 +42,7 @@ export class OAuthService {
       callbackParams = params;
     });
 
-    const redirectUri = `http://localhost:${port}/callback`;
+    const redirectUri = `${getBaseUrlWithLocalPort(port)}/callback`;
     spinner.succeed(`Local server started on port ${port}`);
 
     return {
@@ -154,4 +155,3 @@ export class OAuthService {
     };
   }
 }
-

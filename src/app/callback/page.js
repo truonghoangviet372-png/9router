@@ -25,12 +25,6 @@ function CallbackContent() {
     };
 
     let relayed = false;
-
-    // Check if this callback is from expected origin/port
-    const expectedOrigins = [
-      window.location.origin, // Same origin (for most providers)
-      "http://localhost:1455", // Codex specific port
-    ];
     
     // Method 1: postMessage to opener (popup mode)
     if (window.opener) {

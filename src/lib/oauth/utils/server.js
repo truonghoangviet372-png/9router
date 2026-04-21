@@ -1,5 +1,6 @@
 import http from "http";
 import { URL } from "url";
+import { getBaseUrl } from "../../../shared/utils/baseUrl.js";
 
 /**
  * Start a local HTTP server to receive OAuth callback
@@ -138,7 +139,9 @@ export function startCodexProxy(appPort) {
 
       if (url.pathname === "/callback" || url.pathname === "/auth/callback") {
         // Redirect to app port with all query params preserved
-        const redirectUrl = `http://localhost:${appPort}/callback${url.search}`;
+        const hasConfiguredBaseUrl = Boolean(process.env.BASE_URL || process.env.NEXT_PUBLIC_BASE_URL);
+        const appBaseUrl = hasConfiguredBaseUrl ? getBaseUrl() : `http://localhost:${appPort}`;
+        const redirectUrl = `${appBaseUrl}/callback${url.search}`;
         res.writeHead(302, { Location: redirectUrl });
         res.end();
 
@@ -181,4 +184,3 @@ export function stopCodexProxy() {
     codexProxyServer = null;
   }
 }
-

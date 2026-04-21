@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
 import { Modal, Button, Input } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { buildOAuthRedirectUri } from "@/shared/utils/baseUrl";
 
 /**
  * OAuth Modal Component
@@ -33,9 +34,11 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       setIsLocalhost(
         window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
       );
-      setPlaceholderUrl(`${window.location.origin}/callback?code=...`);
+      const callbackPath = provider === "codex" ? "/auth/callback" : "/callback";
+      const useClientBaseUrl = provider !== "codex";
+      setPlaceholderUrl(`${buildOAuthRedirectUri(callbackPath, { client: useClientBaseUrl })}?code=...`);
     }
-  }, []);
+  }, [provider]);
 
   // Define all useCallback hooks BEFORE the useEffects that reference them
 
@@ -180,10 +183,10 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         } catch {
           codexProxyActive = false;
         }
-        // Always use fixed port 1455 as redirect_uri (Codex requirement)
-        redirectUri = "http://localhost:1455/auth/callback";
+        // Codex requires /auth/callback path; base URL is env-driven.
+        redirectUri = buildOAuthRedirectUri("/auth/callback");
       } else {
-        redirectUri = `http://localhost:${appPort}/callback`;
+        redirectUri = buildOAuthRedirectUri("/callback", { client: true });
       }
 
       // Build authorize URL, optionally passing provider-specific metadata (e.g. gitlab clientId)
