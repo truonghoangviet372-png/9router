@@ -8,7 +8,6 @@ FROM base AS builder
 RUN apk --no-cache upgrade && apk --no-cache add nodejs npm python3 make g++ linux-headers
 
 COPY package.json ./
-
 RUN npm install
 
 COPY . ./
@@ -32,11 +31,11 @@ COPY --from=builder /app/open-sse ./open-sse
 COPY --from=builder /app/src/mitm ./src/mitm
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
 
-RUN mkdir -p /app/data && chown -R bun:bun /app
+RUN mkdir -p /app/data /data && chown -R bun:bun /app /data
 
 RUN apk --no-cache upgrade && apk --no-cache add su-exec && \
-  printf '#!/bin/sh\nchown -R bun:bun /app/data 2>/dev/null\nexec su-exec bun "$@"\n' > /entrypoint.sh && \
-  chmod +x /entrypoint.sh
+printf '#!/bin/sh\nmkdir -p /data /app/data\nchown -R bun:bun /data /app/data 2>/dev/null\nexec su-exec bun "$@"\n' > /entrypoint.sh && \
+chmod +x /entrypoint.sh
 
 EXPOSE 20128
 
