@@ -8,6 +8,13 @@ import { DATA_DIR } from "@/lib/dataDir.js";
 const isCloud = typeof caches !== 'undefined' || typeof caches === 'object';
 const DB_FILE = isCloud ? null : path.join(DATA_DIR, "usage.json");
 const LOG_FILE = isCloud ? null : path.join(DATA_DIR, "log.txt");
+const MAX_HISTORY = (() => {
+  const parsed = Number.parseInt(process.env.USAGE_MAX_HISTORY || "2000", 10);
+  return Number.isInteger(parsed) && parsed >= 200 ? parsed : 2000;
+})();
+const RECENT_REQUEST_LIMIT = 20;
+const MAX_RECENT_SCAN = 2000;
+const METADATA_CACHE_TTL_MS = 15000;
 
 // Ensure data directory exists
 if (!isCloud && fs && typeof fs.existsSync === "function") {
@@ -117,6 +124,108 @@ const pendingTimers = global._pendingTimers;
 
 const PENDING_TIMEOUT_MS = 60 * 1000; // 1 minute
 
+let cachedConnectionMap = null;
+let cachedConnectionMapTs = 0;
+let cachedProviderNodeNameMap = null;
+let cachedProviderNodeNameMapTs = 0;
+let cachedApiKeyMap = null;
+let cachedApiKeyMapTs = 0;
+
+function buildRecentRequestsFromHistory(history, limit = RECENT_REQUEST_LIMIT) {
+  if (!Array.isArray(history) || history.length === 0) return [];
+
+  const results = [];
+  const seen = new Set();
+  const startIndex = Math.max(0, history.length - MAX_RECENT_SCAN);
+
+  for (let i = history.length - 1; i >= startIndex && results.length < limit; i -= 1) {
+    const entry = history[i];
+    const t = entry?.tokens || {};
+    const promptTokens = t.prompt_tokens || t.input_tokens || 0;
+    const completionTokens = t.completion_tokens || t.output_tokens || 0;
+    if (promptTokens === 0 && completionTokens === 0) continue;
+
+    const timestamp = entry?.timestamp || "";
+    const model = entry?.model || "";
+    const provider = entry?.provider || "";
+    const minute = timestamp ? timestamp.slice(0, 16) : "";
+    const dedupeKey = `${model}|${provider}|${promptTokens}|${completionTokens}|${minute}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    results.push({
+      timestamp,
+      model,
+      provider,
+      promptTokens,
+      completionTokens,
+      status: entry?.status || "ok",
+    });
+  }
+
+  return results;
+}
+
+async function getConnectionMapCached() {
+  const now = Date.now();
+  if (cachedConnectionMap && now - cachedConnectionMapTs < METADATA_CACHE_TTL_MS) {
+    return cachedConnectionMap;
+  }
+
+  const map = {};
+  try {
+    const { getProviderConnections } = await import("@/lib/localDb.js");
+    const allConnections = await getProviderConnections();
+    for (const conn of allConnections) {
+      map[conn.id] = conn.name || conn.email || conn.id;
+    }
+  } catch {}
+
+  cachedConnectionMap = map;
+  cachedConnectionMapTs = now;
+  return map;
+}
+
+async function getProviderNodeNameMapCached() {
+  const now = Date.now();
+  if (cachedProviderNodeNameMap && now - cachedProviderNodeNameMapTs < METADATA_CACHE_TTL_MS) {
+    return cachedProviderNodeNameMap;
+  }
+
+  const map = {};
+  try {
+    const { getProviderNodes } = await import("@/lib/localDb.js");
+    const nodes = await getProviderNodes();
+    for (const node of nodes) {
+      if (node.id && node.name) map[node.id] = node.name;
+    }
+  } catch {}
+
+  cachedProviderNodeNameMap = map;
+  cachedProviderNodeNameMapTs = now;
+  return map;
+}
+
+async function getApiKeyMapCached() {
+  const now = Date.now();
+  if (cachedApiKeyMap && now - cachedApiKeyMapTs < METADATA_CACHE_TTL_MS) {
+    return cachedApiKeyMap;
+  }
+
+  const map = {};
+  try {
+    const { getApiKeys } = await import("@/lib/localDb.js");
+    const allApiKeys = await getApiKeys();
+    for (const key of allApiKeys) {
+      map[key.key] = { name: key.name, id: key.id, createdAt: key.createdAt };
+    }
+  } catch {}
+
+  cachedApiKeyMap = map;
+  cachedApiKeyMapTs = now;
+  return map;
+}
+
 /**
  * Track a pending request
  * @param {string} model
@@ -177,14 +286,7 @@ export async function getActiveRequests() {
   const activeRequests = [];
 
   // Build active requests from pending state
-  let connectionMap = {};
-  try {
-    const { getProviderConnections } = await import("@/lib/localDb.js");
-    const allConnections = await getProviderConnections();
-    for (const conn of allConnections) {
-      connectionMap[conn.id] = conn.name || conn.email || conn.id;
-    }
-  } catch {}
+  const connectionMap = await getConnectionMapCached();
 
   for (const [connectionId, models] of Object.entries(pendingRequests.byAccount)) {
     for (const [modelKey, count] of Object.entries(models)) {
@@ -198,28 +300,10 @@ export async function getActiveRequests() {
     }
   }
 
-  // Get recent requests from history (re-read to get latest)
+  // Get recent requests from in-memory history only (avoid heavy disk read/sort per pending update)
   const db = await getUsageDb();
-  await db.read();
   const history = db.data.history || [];
-  const seen = new Set();
-  const recentRequests = [...history]
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .map((e) => {
-      const t = e.tokens || {};
-      const promptTokens = t.prompt_tokens || t.input_tokens || 0;
-      const completionTokens = t.completion_tokens || t.output_tokens || 0;
-      return { timestamp: e.timestamp, model: e.model, provider: e.provider || "", promptTokens, completionTokens, status: e.status || "ok" };
-    })
-    .filter((e) => {
-      if (e.promptTokens === 0 && e.completionTokens === 0) return false;
-      const minute = e.timestamp ? e.timestamp.slice(0, 16) : "";
-      const key = `${e.model}|${e.provider}|${e.promptTokens}|${e.completionTokens}|${minute}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 20);
+  const recentRequests = buildRecentRequestsFromHistory(history);
 
   // Error provider (auto-clear after 10s)
   const errorProvider = (Date.now() - lastErrorProvider.ts < 10000) ? lastErrorProvider.provider : "";
@@ -305,7 +389,6 @@ export async function saveRequestUsage(entry) {
     if (!db.data.dailySummary) db.data.dailySummary = {};
     aggregateEntryToDailySummary(db.data.dailySummary, entry);
 
-    const MAX_HISTORY = 10000;
     if (db.data.history.length > MAX_HISTORY) {
       db.data.history.splice(0, db.data.history.length - MAX_HISTORY);
     }
@@ -502,52 +585,14 @@ export async function getUsageStats(period = "all") {
   const history = db.data.history || [];
   const dailySummary = db.data.dailySummary || {};
 
-  const { getProviderConnections, getApiKeys, getProviderNodes } = await import("@/lib/localDb.js");
-
-  let allConnections = [];
-  try { allConnections = await getProviderConnections(); } catch {}
-  const connectionMap = {};
-  for (const conn of allConnections) {
-    connectionMap[conn.id] = conn.name || conn.email || conn.id;
-  }
-
-  const providerNodeNameMap = {};
-  try {
-    const nodes = await getProviderNodes();
-    for (const node of nodes) {
-      if (node.id && node.name) providerNodeNameMap[node.id] = node.name;
-    }
-  } catch {}
-
-  let allApiKeys = [];
-  try { allApiKeys = await getApiKeys(); } catch {}
-  const apiKeyMap = {};
-  for (const key of allApiKeys) {
-    apiKeyMap[key.key] = { name: key.name, id: key.id, createdAt: key.createdAt };
-  }
+  const [connectionMap, providerNodeNameMap, apiKeyMap] = await Promise.all([
+    getConnectionMapCached(),
+    getProviderNodeNameMapCached(),
+    getApiKeyMapCached(),
+  ]);
 
   // Recent requests (always from live history)
-  const seen = new Set();
-  const recentRequests = [...history]
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .map((e) => {
-      const t = e.tokens || {};
-      return {
-        timestamp: e.timestamp, model: e.model, provider: e.provider || "",
-        promptTokens: t.prompt_tokens || t.input_tokens || 0,
-        completionTokens: t.completion_tokens || t.output_tokens || 0,
-        status: e.status || "ok",
-      };
-    })
-    .filter((e) => {
-      if (e.promptTokens === 0 && e.completionTokens === 0) return false;
-      const minute = e.timestamp ? e.timestamp.slice(0, 16) : "";
-      const key = `${e.model}|${e.provider}|${e.promptTokens}|${e.completionTokens}|${minute}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 20);
+  const recentRequests = buildRecentRequestsFromHistory(history);
 
   const lifetimeTotalRequests = typeof db.data.totalRequestsLifetime === "number"
     ? db.data.totalRequestsLifetime

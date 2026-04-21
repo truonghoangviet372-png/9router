@@ -1,0 +1,125 @@
+Mounting volume on: /var/lib/containers/railwayapp/bind-mounts/51d971a8-1ab4-459d-ac14-0c2a915c5a8c/vol_uh5oox7g6nua610b
+Starting Container
+▲ Next.js 16.2.4
+- Local:         http://localhost:20128
+- Network:       http://0.0.0.0:20128
+✓ Ready in 0ms
+[SSE] Translators initialized for /v1/responses
+[14:38:36] 📥 POST /v1/responses | cx/gpt-5.3-codex | 272 msgs | 17 tools | effort=high
+[14:38:36] 🔍 [AUTH] API Key: eyJh...GS_4
+[14:38:36] ℹ️  [ROUTING] cx/gpt-5.3-codex → codex/gpt-5.3-codex
+[14:38:36] 🔍 [AUTH] codex | total connections: 3, excludeIds: none, model: gpt-5.3-codex
+[14:38:36] 🔍 [AUTH] codex | available: 3/3
+[14:38:37] ℹ️  [AUTH] Using codex account: Account 3
+[14:38:37] 🔍 [FORMAT] openai-responses → openai-responses | stream=true
+[14:38:37] [PENDING] START | provider=codex | model=gpt-5.3-codex
+[14:38:37] 🔍 [REQUEST] CODEX | gpt-5.3-codex | 272 msgs
+[14:38:37] ℹ️  [PROXY] CODEX | gpt-5.3-codex | conn=Account 3 | pool=d6fb8426-1972-4758-8acb-6088ef87d2c9 | url=http://127.0.0.1:33619
+[14:38:49] [PENDING] END | provider=codex | model=gpt-5.3-codex
+[14:38:49] 📊 [USAGE] CODEX | in=117734 | out=460 | account=7b7408bc... | cache_read=2816 | reasoning=228
+[14:38:49] 📊 [STREAM USAGE] CODEX | in=117734 | out=460 | account=7b7408bc...
+[14:38:49] 🌊 [STREAM] CODEX | gpt-5.3-codex | 12656ms | complete
+[14:38:51] 📥 POST /v1/responses | cx/gpt-5.3-codex | 278 msgs | 17 tools | effort=high
+[14:38:51] 🔍 [AUTH] API Key: eyJh...GS_4
+[14:38:51] ℹ️  [ROUTING] cx/gpt-5.3-codex → codex/gpt-5.3-codex
+[14:38:51] 🔍 [AUTH] codex | total connections: 3, excludeIds: none, model: gpt-5.3-codex
+[14:38:51] 🔍 [AUTH] codex | available: 3/3
+[14:38:51] ℹ️  [AUTH] Using codex account: Account 3
+[14:38:51] 🔍 [FORMAT] openai-responses → openai-responses | stream=true
+[14:38:51] [PENDING] START | provider=codex | model=gpt-5.3-codex
+[14:38:51] 🔍 [REQUEST] CODEX | gpt-5.3-codex | 278 msgs
+[14:38:51] ℹ️  [PROXY] CODEX | gpt-5.3-codex | conn=Account 3 | pool=d6fb8426-1972-4758-8acb-6088ef87d2c9 | url=http://127.0.0.1:33619
+[14:39:08] [PENDING] END | provider=codex | model=gpt-5.3-codex
+[14:39:08] 📊 [USAGE] CODEX | in=124169 | out=856 | account=7b7408bc... | cache_read=118144 | reasoning=564
+[14:39:08] 📊 [STREAM USAGE] CODEX | in=124169 | out=856 | account=7b7408bc...
+[14:39:08] 🌊 [STREAM] CODEX | gpt-5.3-codex | 17399ms | complete
+[14:40:04] 📥 POST /v1/responses | cx/gpt-5.3-codex | 281 msgs | 17 tools | effort=high
+[14:40:04] 🔍 [AUTH] API Key: eyJh...GS_4
+[14:40:04] ℹ️  [ROUTING] cx/gpt-5.3-codex → codex/gpt-5.3-codex
+[14:40:04] 🔍 [AUTH] codex | total connections: 3, excludeIds: none, model: gpt-5.3-codex
+[14:40:04] 🔍 [AUTH] codex | available: 3/3
+[14:40:04] ℹ️  [AUTH] Using codex account: Account 3
+[14:40:04] 🔍 [FORMAT] openai-responses → openai-responses | stream=true
+[14:40:04] [PENDING] START | provider=codex | model=gpt-5.3-codex
+[14:40:04] 🔍 [REQUEST] CODEX | gpt-5.3-codex | 281 msgs
+[14:40:04] ℹ️  [PROXY] CODEX | gpt-5.3-codex | conn=Account 3 | pool=d6fb8426-1972-4758-8acb-6088ef87d2c9 | url=http://127.0.0.1:33619
+[14:40:19] 📊 [STREAM USAGE] CODEX | in=124346 | out=746 | account=7b7408bc...
+[14:40:19] 🌊 [STREAM] CODEX | gpt-5.3-codex | 15536ms | complete
+[14:40:19] [PENDING] END | provider=codex | model=gpt-5.3-codex
+[14:40:19] 📊 [USAGE] CODEX | in=124346 | out=746 | account=7b7408bc... | cache_read=117632 | reasoning=437
+[14:40:21] 🔍 [AUTH] codex | available: 3/3
+[14:40:21] ℹ️  [AUTH] Using codex account: Account 1
+[14:40:21] 🔍 [FORMAT] openai-responses → openai-responses | stream=true
+[14:40:21] [PENDING] START | provider=codex | model=gpt-5.3-codex
+[14:40:21] 🔍 [REQUEST] CODEX | gpt-5.3-codex | 291 msgs
+[14:40:21] ℹ️  [PROXY] CODEX | gpt-5.3-codex | conn=Account 1 | pool=c85788de-f72c-4414-99c8-dd7f529b71b9 | url=http://127.0.0.1:36687
+[14:40:21] 📥 POST /v1/responses | cx/gpt-5.3-codex | 291 msgs | 17 tools | effort=high
+[14:40:21] 🔍 [AUTH] API Key: eyJh...GS_4
+[14:40:21] ℹ️  [ROUTING] cx/gpt-5.3-codex → codex/gpt-5.3-codex
+[14:40:21] 🔍 [AUTH] codex | total connections: 3, excludeIds: none, model: gpt-5.3-codex
+[14:40:28] [PENDING] END | provider=codex | model=gpt-5.3-codex
+[14:40:28] 📊 [USAGE] CODEX | in=137381 | out=231 | account=ddf5e6d1... | cache_read=124288 | reasoning=16
+[14:40:28] 📊 [STREAM USAGE] CODEX | in=137381 | out=231 | account=ddf5e6d1...
+[14:40:28] 🌊 [STREAM] CODEX | gpt-5.3-codex | 6243ms | complete
+[14:40:29] 📥 POST /v1/responses | cx/gpt-5.3-codex | 300 msgs | 17 tools | effort=high
+[14:40:29] 🔍 [AUTH] API Key: eyJh...GS_4
+[14:40:29] ℹ️  [ROUTING] cx/gpt-5.3-codex → codex/gpt-5.3-codex
+[14:40:29] 🔍 [AUTH] codex | total connections: 3, excludeIds: none, model: gpt-5.3-codex
+[14:40:29] 🔍 [AUTH] codex | available: 3/3
+[14:40:29] ℹ️  [AUTH] Using codex account: Account 1
+[14:40:29] 🔍 [FORMAT] openai-responses → openai-responses | stream=true
+[14:40:29] [PENDING] START | provider=codex | model=gpt-5.3-codex
+[14:40:29] 🔍 [REQUEST] CODEX | gpt-5.3-codex | 300 msgs
+[14:40:29] ℹ️  [PROXY] CODEX | gpt-5.3-codex | conn=Account 1 | pool=c85788de-f72c-4414-99c8-dd7f529b71b9 | url=http://127.0.0.1:36687
+[14:40:35] [PENDING] END | provider=codex | model=gpt-5.3-codex
+[14:40:35] 📊 [USAGE] CODEX | in=147056 | out=279 | account=ddf5e6d1... | cache_read=137600 | reasoning=211
+[14:40:35] 📊 [STREAM USAGE] CODEX | in=147056 | out=279 | account=ddf5e6d1...
+[14:40:35] 🌊 [STREAM] CODEX | gpt-5.3-codex | 6845ms | complete
+[14:40:37] 📥 POST /v1/responses | cx/gpt-5.3-codex | 303 msgs | 17 tools | effort=high
+[14:40:37] 🔍 [AUTH] API Key: eyJh...GS_4
+[14:40:37] ℹ️  [ROUTING] cx/gpt-5.3-codex → codex/gpt-5.3-codex
+[14:40:37] 🔍 [AUTH] codex | total connections: 3, excludeIds: none, model: gpt-5.3-codex
+[14:40:37] 🔍 [AUTH] codex | available: 3/3
+[14:40:37] ℹ️  [AUTH] Using codex account: Account 1
+[14:40:37] 🔍 [FORMAT] openai-responses → openai-responses | stream=true
+[14:40:37] [PENDING] START | provider=codex | model=gpt-5.3-codex
+[14:40:37] 🔍 [REQUEST] CODEX | gpt-5.3-codex | 303 msgs
+[14:40:37] ℹ️  [PROXY] CODEX | gpt-5.3-codex | conn=Account 1 | pool=c85788de-f72c-4414-99c8-dd7f529b71b9 | url=http://127.0.0.1:36687
+[14:40:44] [PENDING] END | provider=codex | model=gpt-5.3-codex
+[14:40:44] 📊 [USAGE] CODEX | in=147927 | out=277 | account=ddf5e6d1... | cache_read=147328 | reasoning=49
+[14:40:44] 📊 [STREAM USAGE] CODEX | in=147927 | out=277 | account=ddf5e6d1...
+[14:40:44] 🌊 [STREAM] CODEX | gpt-5.3-codex | 6958ms | complete
+[14:40:46] 📥 POST /v1/responses | cx/gpt-5.3-codex | 312 msgs | 17 tools | effort=high
+[14:40:46] 🔍 [AUTH] API Key: eyJh...GS_4
+[14:40:46] ℹ️  [ROUTING] cx/gpt-5.3-codex → codex/gpt-5.3-codex
+[14:40:46] 🔍 [AUTH] codex | total connections: 3, excludeIds: none, model: gpt-5.3-codex
+[14:40:46] 🔍 [AUTH] codex | available: 3/3
+[14:40:46] ℹ️  [AUTH] Using codex account: Account 2
+[14:40:46] 🔍 [FORMAT] openai-responses → openai-responses | stream=true
+[14:40:46] [PENDING] START | provider=codex | model=gpt-5.3-codex
+[14:40:46] 🔍 [REQUEST] CODEX | gpt-5.3-codex | 312 msgs
+[14:40:46] ℹ️  [PROXY] CODEX | gpt-5.3-codex | conn=Account 2 | pool=09458cb4-6b11-443e-866b-dd6abac37186 | url=http://127.0.0.1:46631
+[14:41:03] 📊 [USAGE] CODEX | in=155779 | out=843 | account=73b73b48... | cache_read=148096 | reasoning=550
+[14:41:03] 📊 [STREAM USAGE] CODEX | in=155779 | out=843 | account=73b73b48...
+[14:41:03] 🌊 [STREAM] CODEX | gpt-5.3-codex | 17062ms | complete
+[14:41:05] 📥 POST /v1/responses | cx/gpt-5.3-codex | 322 msgs | 17 tools | effort=high
+[14:41:05] 🔍 [AUTH] API Key: eyJh...GS_4
+[14:41:05] ℹ️  [ROUTING] cx/gpt-5.3-codex → codex/gpt-5.3-codex
+[14:41:05] 🔍 [AUTH] codex | total connections: 3, excludeIds: none, model: gpt-5.3-codex
+[14:41:05] 🔍 [AUTH] codex | available: 3/3
+[14:41:05] ℹ️  [AUTH] Using codex account: Account 2
+[14:41:05] 🔍 [FORMAT] openai-responses → openai-responses | stream=true
+[14:41:05] [PENDING] START | provider=codex | model=gpt-5.3-codex
+[14:41:05] 🔍 [REQUEST] CODEX | gpt-5.3-codex | 322 msgs
+[14:41:05] ℹ️  [PROXY] CODEX | gpt-5.3-codex | conn=Account 2 | pool=09458cb4-6b11-443e-866b-dd6abac37186 | url=http://127.0.0.1:46631
+[14:41:03] [PENDING] END | provider=codex | model=gpt-5.3-codex
+[14:41:11] [PENDING] END | provider=codex | model=gpt-5.3-codex
+[14:41:11] 📊 [USAGE] CODEX | in=157558 | out=203 | account=73b73b48... | cache_read=156032 | reasoning=12
+[14:41:11] 📊 [STREAM USAGE] CODEX | in=157558 | out=203 | account=73b73b48...
+[14:41:11] 🌊 [STREAM] CODEX | gpt-5.3-codex | 6578ms | complete
+[14:41:13] 📥 POST /v1/responses | cx/gpt-5.3-codex | 329 msgs | 17 tools | effort=high
+[14:41:13] 🔍 [AUTH] API Key: eyJh...GS_4
+[14:41:13] ℹ️  [ROUTING] cx/gpt-5.3-codex → codex/gpt-5.3-codex
+[14:41:13] 🔍 [AUTH] codex | total connections: 3, excludeIds: none, model: gpt-5.3-codex
+[14:41:13] 🔍 [AUTH] codex | available: 3/3
+[14:41:13] 🔍 [FORMAT] openai-responses → openai-responses | stream=true
