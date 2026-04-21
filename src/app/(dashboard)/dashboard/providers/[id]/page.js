@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Card, Button, Badge, Input, Modal, CardSkeleton, OAuthModal, KiroOAuthWrapper, CursorAuthModal, IFlowCookieModal, GitLabAuthModal, Toggle, Select, EditConnectionModal } from "@/shared/components";
+import { Card, Button, Badge, Input, Modal, CardSkeleton, OAuthModal, KiroOAuthWrapper, CursorAuthModal, IFlowCookieModal, CodexSessionModal, GitLabAuthModal, Toggle, Select, EditConnectionModal } from "@/shared/components";
 import { OAUTH_PROVIDERS, APIKEY_PROVIDERS, FREE_PROVIDERS, FREE_TIER_PROVIDERS, getProviderAlias, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, AI_PROVIDERS, THINKING_CONFIG } from "@/shared/constants/providers";
 import { getModelsByProviderId } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
@@ -27,6 +27,7 @@ export default function ProviderDetailPage() {
   const [proxyPools, setProxyPools] = useState([]);
   const [showOAuthModal, setShowOAuthModal] = useState(false);
   const [showIFlowCookieModal, setShowIFlowCookieModal] = useState(false);
+  const [showCodexSessionModal, setShowCodexSessionModal] = useState(false);
   const [showAddApiKeyModal, setShowAddApiKeyModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showEditNodeModal, setShowEditNodeModal] = useState(false);
@@ -298,6 +299,11 @@ export default function ProviderDetailPage() {
   const handleIFlowCookieSuccess = () => {
     fetchConnections();
     setShowIFlowCookieModal(false);
+  };
+
+  const handleCodexSessionSuccess = () => {
+    fetchConnections();
+    setShowCodexSessionModal(false);
   };
 
   const handleSaveApiKey = async (formData) => {
@@ -918,6 +924,11 @@ export default function ProviderDetailPage() {
                       Cookie Auth
                     </Button>
                   )}
+                  {providerId === "codex" && (
+                    <Button icon="file_upload" variant="secondary" onClick={() => setShowCodexSessionModal(true)}>
+                      Session
+                    </Button>
+                  )}
                   <Button icon="add" onClick={() => isOAuth ? setShowOAuthModal(true) : setShowAddApiKeyModal(true)}>
                     {providerId === "iflow" ? "OAuth" : "Add Connection"}
                   </Button>
@@ -938,6 +949,17 @@ export default function ProviderDetailPage() {
                       title="Add connection using browser cookie"
                     >
                       Cookie
+                    </Button>
+                  )}
+                  {providerId === "codex" && (
+                    <Button
+                      size="sm"
+                      icon="file_upload"
+                      variant="secondary"
+                      onClick={() => setShowCodexSessionModal(true)}
+                      title="Import account from session JSON"
+                    >
+                      Session
                     </Button>
                   )}
                   <Button
@@ -1004,6 +1026,13 @@ export default function ProviderDetailPage() {
           isOpen={showIFlowCookieModal}
           onSuccess={handleIFlowCookieSuccess}
           onClose={() => setShowIFlowCookieModal(false)}
+        />
+      )}
+      {providerId === "codex" && (
+        <CodexSessionModal
+          isOpen={showCodexSessionModal}
+          onSuccess={handleCodexSessionSuccess}
+          onClose={() => setShowCodexSessionModal(false)}
         />
       )}
       <AddApiKeyModal
