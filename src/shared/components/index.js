@@ -30,6 +30,7 @@ export { default as IFlowCookieModal } from "./IFlowCookieModal";
 export { default as CodexSessionModal } from "./CodexSessionModal";
 export { default as GitLabAuthModal } from "./GitLabAuthModal";
 export { default as EditConnectionModal } from "./EditConnectionModal";
+export { default as AddCustomEmbeddingModal } from "./AddCustomEmbeddingModal";
 export { default as SegmentedControl } from "./SegmentedControl";
 export { default as Tooltip } from "./Tooltip";
 

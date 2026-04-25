@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { getProviderNodeById } from "@/models";
-import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
+import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { getDefaultModel } from "open-sse/config/providerModels.js";
+import { resolveOllamaLocalHost } from "open-sse/config/providers.js";
+import { PROVIDER_ENDPOINTS } from "@/shared/constants/config";
 
 // POST /api/providers/validate - Validate API key with provider
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { provider, apiKey } = body;
+    const { provider, apiKey, providerSpecificData } = body;
 
     if (!provider || (!apiKey && provider !== "ollama-local")) {
       return NextResponse.json({ error: "Provider and API key required" }, { status: 400 });
@@ -28,6 +30,37 @@ export async function POST(request) {
           headers: { "Authorization": `Bearer ${apiKey}` },
         });
         isValid = res.ok;
+        return NextResponse.json({
+          valid: isValid,
+          error: isValid ? null : "Invalid API key",
+        });
+      }
+
+      // Custom Embedding nodes: probe /models (most embedding APIs are OpenAI-compatible)
+      if (isCustomEmbeddingProvider(provider)) {
+        const node = await getProviderNodeById(provider);
+        if (!node) {
+          return NextResponse.json({ error: "Custom Embedding node not found" }, { status: 404 });
+        }
+        const baseUrl = node.baseUrl?.replace(/\/$/, "");
+        const modelsRes = await fetch(`${baseUrl}/models`, {
+          headers: { "Authorization": `Bearer ${apiKey}` },
+        });
+        if (modelsRes.ok) {
+          return NextResponse.json({ valid: true });
+        }
+        // Auth errors are definitive
+        if (modelsRes.status === 401 || modelsRes.status === 403) {
+          return NextResponse.json({ valid: false, error: "Invalid API key" });
+        }
+        // Fallback: probe /embeddings with a common test model — many providers lack /models
+        const embedRes = await fetch(`${baseUrl}/embeddings`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "test", input: "ping" }),
+        });
+        // 401/403 = bad key; anything else (including 400 "model not found") means key works
+        isValid = embedRes.status !== 401 && embedRes.status !== 403;
         return NextResponse.json({
           valid: isValid,
           error: isValid ? null : "Invalid API key",
@@ -59,6 +92,35 @@ export async function POST(request) {
         return NextResponse.json({
           valid: isValid,
           error: isValid ? null : "Invalid API key",
+        });
+      }
+
+      if (provider === "azure") {
+        const { providerSpecificData } = body;
+        const endpoint = (providerSpecificData?.azureEndpoint || "").replace(/\/$/, "");
+        const deployment = providerSpecificData?.deployment || "gpt-4";
+        const apiVersion = providerSpecificData?.apiVersion || "2024-10-01-preview";
+        const organization = providerSpecificData?.organization;
+
+        const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
+        const headers = {
+          "api-key": apiKey,
+          "Content-Type": "application/json",
+        };
+        if (organization) headers["OpenAI-Organization"] = organization;
+
+        const azureRes = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            messages: [{ role: "user", content: "test" }],
+            max_tokens: 1,
+          }),
+        });
+        isValid = azureRes.status !== 401 && azureRes.status !== 403;
+        return NextResponse.json({
+          valid: isValid,
+          error: isValid ? null : "Invalid API key or Azure configuration",
         });
       }
 
@@ -150,6 +212,23 @@ export async function POST(request) {
           }
           break;
         }
+        case "volcengine-ark":
+        case "byteplus": {
+          const res = await fetch(PROVIDER_ENDPOINTS[provider], {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${apiKey}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              model: getDefaultModel(provider),
+              max_tokens: 1,
+              messages: [{ role: "user", content: "test" }],
+            }),
+          });
+          isValid = res.status !== 401 && res.status !== 403;
+          break;
+        }
 
         case "deepseek":
         case "groq":
@@ -183,7 +262,7 @@ export async function POST(request) {
             siliconflow: "https://api.siliconflow.cn/v1/models",
             hyperbolic: "https://api.hyperbolic.xyz/v1/models",
             ollama: "https://ollama.com/api/tags",
-            "ollama-local": "http://localhost:11434/api/tags",
+            "ollama-local": `${resolveOllamaLocalHost({ providerSpecificData })}/api/tags`,
             assemblyai: "https://api.assemblyai.com/v1/account",
             nanobanana: "https://api.nanobananaapi.ai/v1/models",
             chutes: "https://llm.chutes.ai/v1/models",
@@ -193,6 +272,21 @@ export async function POST(request) {
           if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
           const res = await fetch(endpoints[provider], { headers });
           isValid = res.ok;
+          break;
+        }
+
+        case "opencode-go": {
+          const res = await fetch("https://opencode.ai/zen/go/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+            body: JSON.stringify({
+              model: getDefaultModel("opencode-go"),
+              messages: [{ role: "user", content: "ping" }],
+              max_tokens: 1,
+              stream: false,
+            }),
+          });
+          isValid = res.status !== 401 && res.status !== 403;
           break;
         }
 
@@ -250,6 +344,98 @@ export async function POST(request) {
               { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }
             );
             isValid = probeRes.status !== 401 && probeRes.status !== 403;
+          }
+          break;
+        }
+
+        case "grok-web": {
+          const token = apiKey.startsWith("sso=") ? apiKey.slice(4) : apiKey;
+          // Cloudflare-bypass: send POST with same browser fingerprint headers as GrokWebExecutor
+          const randomHex = (n) => {
+            const a = new Uint8Array(n);
+            crypto.getRandomValues(a);
+            return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
+          };
+          const statsigId = Buffer.from("e:TypeError: Cannot read properties of null (reading 'children')").toString("base64");
+          const traceId = randomHex(16);
+          const spanId = randomHex(8);
+          const res = await fetch("https://grok.com/rest/app-chat/conversations/new", {
+            method: "POST",
+            headers: {
+              Accept: "*/*",
+              "Accept-Encoding": "gzip, deflate, br, zstd",
+              "Accept-Language": "en-US,en;q=0.9",
+              "Cache-Control": "no-cache",
+              "Content-Type": "application/json",
+              Cookie: `sso=${token}`,
+              Origin: "https://grok.com",
+              Pragma: "no-cache",
+              Referer: "https://grok.com/",
+              "Sec-Ch-Ua": '"Google Chrome";v="136", "Chromium";v="136", "Not(A:Brand";v="24"',
+              "Sec-Ch-Ua-Mobile": "?0",
+              "Sec-Ch-Ua-Platform": '"macOS"',
+              "Sec-Fetch-Dest": "empty",
+              "Sec-Fetch-Mode": "cors",
+              "Sec-Fetch-Site": "same-origin",
+              "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+              "x-statsig-id": statsigId,
+              "x-xai-request-id": crypto.randomUUID(),
+              traceparent: `00-${traceId}-${spanId}-00`,
+            },
+            body: JSON.stringify({
+              temporary: true, modelName: "grok-4", modelMode: "MODEL_MODE_GROK_4", message: "ping",
+              fileAttachments: [], imageAttachments: [],
+              disableSearch: false, enableImageGeneration: false, returnImageBytes: false,
+              returnRawGrokInXaiRequest: false, enableImageStreaming: false, imageGenerationCount: 0,
+              forceConcise: false, toolOverrides: {}, enableSideBySide: true, sendFinalMetadata: true,
+              isReasoning: false, disableTextFollowUps: true, disableMemory: true,
+              forceSideBySide: false, isAsyncChat: false, disableSelfHarmShortCircuit: false,
+            }),
+          });
+          // Cookie valid = any non-401/403 response (200, 400, 429 all mean cookie accepted)
+          if (res.status === 401 || res.status === 403) {
+            isValid = false;
+            error = "Invalid SSO cookie — re-paste from grok.com DevTools → Cookies → sso";
+          } else {
+            isValid = true;
+          }
+          break;
+        }
+
+        case "perplexity-web": {
+          let sessionToken = apiKey;
+          if (sessionToken.startsWith("__Secure-next-auth.session-token=")) {
+            sessionToken = sessionToken.slice("__Secure-next-auth.session-token=".length);
+          }
+          const tz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
+          const res = await fetch("https://www.perplexity.ai/rest/sse/perplexity_ask", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+              Origin: "https://www.perplexity.ai",
+              Referer: "https://www.perplexity.ai/",
+              "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+              "X-App-ApiClient": "default",
+              "X-App-ApiVersion": "2.18",
+              Cookie: `__Secure-next-auth.session-token=${sessionToken}`,
+            },
+            body: JSON.stringify({
+              query_str: "ping",
+              params: {
+                query_str: "ping", search_focus: "internet", mode: "concise", model_preference: "pplx_pro",
+                sources: ["web"], attachments: [],
+                frontend_uuid: crypto.randomUUID(), frontend_context_uuid: crypto.randomUUID(),
+                version: "2.18", language: "en-US", timezone: tz,
+                search_recency_filter: null, is_incognito: true, use_schematized_api: true, last_backend_uuid: null,
+              },
+            }),
+          });
+          if (res.status === 401 || res.status === 403) {
+            isValid = false;
+            error = "Invalid session cookie — re-paste __Secure-next-auth.session-token from perplexity.ai";
+          } else {
+            isValid = true;
           }
           break;
         }
